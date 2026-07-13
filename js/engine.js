@@ -1,5 +1,4 @@
-import { Synth } from '../audio.js';
-import { chordMidis, progressionForKey, PROGRESSIONS } from '../theory.js';
+import { chordMidis, progressionForKey, PROGRESSIONS } from './theory.js';
 
 export class PlaybackEngine {
   constructor(synth) {
