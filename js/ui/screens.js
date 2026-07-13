@@ -3,6 +3,7 @@ import {
   chordLabel,
   chordMidis,
   chordPcs,
+  formatPc,
   progressionForKey,
   PROGRESSIONS,
   pcsMatch,
@@ -20,6 +21,10 @@ function el(tag, cls, html) {
 function fnLabel(fn) {
   const map = { tonic: 'T', subdominant: 'SD', dominant: 'D', borrowed: '外', other: '—' };
   return map[fn] || '—';
+}
+
+function noteStyleLabel(style) {
+  return { abc: 'ABC', katakana: 'カタカナ', both: 'カタカナ+ABC' }[style] || style;
 }
 
 export function renderApp({ root, state, synth, engine, actions }) {
@@ -82,7 +87,7 @@ function renderHome(state, actions) {
         <span class="mode-desc">進行を1コードずつ鍵盤で入力</span>
       </button>
     </nav>
-    <div class="home-meta">Key: ${state.key} · ${state.showRoman ? 'Roman ON' : 'Roman OFF'}</div>
+    <div class="home-meta">Key: ${state.key} · ${noteStyleLabel(state.noteStyle)} · ${state.showRoman ? 'Roman ON' : 'Roman OFF'}</div>
   `;
   s.querySelectorAll('[data-mode]').forEach((btn) => {
     btn.onclick = () => actions.openMode(btn.dataset.mode);
@@ -142,6 +147,7 @@ function renderProgression(state, synth, engine, actions) {
   const activeChord = p.chords[state.playIndex ?? 0];
   const kb = createKeyboard({
     container: kbHost,
+    noteStyle: state.noteStyle === 'abc' ? 'abc' : 'katakana',
     onNoteOn: ({ midi }) => synth.playMidi(midi, 0.4, state.volume * 0.4),
   });
   kb.setHighlight(chordPcs(activeChord));
@@ -155,15 +161,13 @@ function renderChord(state, synth, actions) {
   const sym = state.chordSymbol || 'C';
   const pcs = chordPcs(sym);
   const fn = chordFunction(sym, state.key);
+  const style = state.noteStyle || 'both';
 
   const display = el('div', 'chord-display');
   display.innerHTML = `
     <div class="chord-big">${sym}</div>
     <div class="chord-meta">${chordLabel(sym, state.key, state.showRoman)} · ${fnLabel(fn)}</div>
-    <div class="chord-tones">${pcs.map((pc) => {
-      const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-      return names[pc];
-    }).join(' · ')}</div>
+    <div class="chord-tones">${pcs.map((pc) => formatPc(pc, style)).join(' · ')}</div>
   `;
   s.appendChild(display);
 
@@ -188,6 +192,7 @@ function renderChord(state, synth, actions) {
   s.appendChild(kbHost);
   const kb = createKeyboard({
     container: kbHost,
+    noteStyle: style === 'abc' ? 'abc' : 'katakana',
     onNoteOn: ({ midi }) => synth.playMidi(midi, 0.4, state.volume * 0.4),
   });
   kb.setHighlight(pcs);
@@ -202,6 +207,7 @@ function renderPractice(state, synth, actions) {
   const target = p.chords[idx];
   const targetPcs = chordPcs(target);
   const selected = state.practiceSelected || [];
+  const style = state.noteStyle || 'both';
 
   const s = el('section', 'screen practice');
   s.innerHTML = `
@@ -213,8 +219,9 @@ function renderPractice(state, synth, actions) {
       <div class="practice-label">このコードを押す</div>
       <div class="practice-symbol">${target}</div>
       ${state.showRoman ? `<div class="practice-roman">${chordLabel(target, state.key)}</div>` : ''}
+      <div class="practice-roman">${targetPcs.map((pc) => formatPc(pc, style)).join(' · ')}</div>
     </div>
-    <div class="practice-selected">選択: ${selected.length ? selected.map((pc) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][pc]).join(' ') : '—'}</div>
+    <div class="practice-selected">選択: ${selected.length ? selected.map((pc) => formatPc(pc, style)).join(' ') : '—'}</div>
   `;
 
   const row = el('div', 'practice-actions');
@@ -231,6 +238,7 @@ function renderPractice(state, synth, actions) {
   s.appendChild(kbHost);
   const kb = createKeyboard({
     container: kbHost,
+    noteStyle: style === 'abc' ? 'abc' : 'katakana',
     onNoteOn: ({ midi, pc }) => {
       synth.playMidi(midi, 0.35, state.volume * 0.35);
       actions.togglePracticePc(pc);
@@ -238,19 +246,24 @@ function renderPractice(state, synth, actions) {
   });
   const selPcs = [...new Set(selected)];
   kb.setHighlight([...new Set([...targetPcs, ...selPcs])]);
-  selPcs.forEach((pc) => {
-    // highlight selected differently via pressed state handled in main
-  });
   state._kb = kb;
   return s;
 }
 
 function renderSettings(state, actions) {
   const s = el('section', 'screen settings');
+  const noteStyle = state.noteStyle || 'both';
   s.innerHTML = `
     <div class="settings-group">
       <label class="field">Key
         <select data-key>${KEYS.map((k) => `<option value="${k}" ${k === state.key ? 'selected' : ''}>${k}</option>`).join('')}</select>
+      </label>
+      <label class="field">音名表記
+        <select data-note-style>
+          <option value="katakana" ${noteStyle === 'katakana' ? 'selected' : ''}>カタカナ（ド レ ミ）</option>
+          <option value="both" ${noteStyle === 'both' ? 'selected' : ''}>カタカナ + ABC</option>
+          <option value="abc" ${noteStyle === 'abc' ? 'selected' : ''}>ABC のみ</option>
+        </select>
       </label>
       <label class="field">Roman numerals
         <input type="checkbox" data-roman ${state.showRoman ? 'checked' : ''}>
@@ -265,6 +278,7 @@ function renderSettings(state, actions) {
     <button type="button" class="btn primary" data-back>戻る</button>
   `;
   s.querySelector('[data-key]').onchange = (e) => actions.setKey(e.target.value);
+  s.querySelector('[data-note-style]').onchange = (e) => actions.setNoteStyle(e.target.value);
   s.querySelector('[data-roman]').onchange = (e) => actions.setShowRoman(e.target.checked);
   s.querySelector('[data-vol]').oninput = (e) => actions.setVolume(Number(e.target.value));
   s.querySelector('[data-prog]').onchange = (e) => actions.setProgression(e.target.value);

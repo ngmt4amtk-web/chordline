@@ -51,6 +51,11 @@ const actions = {
     saveState(state);
     rerender();
   },
+  setNoteStyle(v) {
+    state.noteStyle = v;
+    saveState(state);
+    rerender();
+  },
   setVolume(v) {
     state.volume = v;
     synth.setVolume(v);

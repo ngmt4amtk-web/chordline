@@ -7,6 +7,7 @@ const defaults = {
   mode: null,
   key: 'C',
   showRoman: true,
+  noteStyle: 'both',
   tempo: 72,
   volume: 0.85,
   progressionId: PROGRESSIONS[0].id,
@@ -30,6 +31,7 @@ export function saveState(state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       key: state.key,
       showRoman: state.showRoman,
+      noteStyle: state.noteStyle,
       tempo: state.tempo,
       volume: state.volume,
       progressionId: state.progressionId,

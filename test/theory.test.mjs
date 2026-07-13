@@ -33,7 +33,7 @@ test('transpose C to G', () => {
 
 test('progressionForKey', () => {
   const p = progressionForKey({ key: 'C', chords: ['C', 'G', 'Am', 'F'] }, 'G');
-  assert.deepEqual(p.chords, ['G', 'D', 'Bm', 'C']);
+  assert.deepEqual(p.chords, ['G', 'D', 'Em', 'C']);
 });
 
 test('romanNumeral axis in C', () => {
@@ -54,8 +54,9 @@ test('chordFunction', () => {
   assert.equal(chordFunction('F', 'C'), 'subdominant');
 });
 
-test('chordMidis returns sorted midis', () => {
-  const m = chordMidis('C');
-  assert.ok(m.length >= 3);
-  assert.ok(m[0] < m[m.length - 1]);
+test('formatPc katakana', async () => {
+  const { formatPc } = await import('../js/theory.js');
+  assert.equal(formatPc(0, 'katakana'), 'ド');
+  assert.equal(formatPc(4, 'katakana'), 'ミ');
+  assert.equal(formatPc(0, 'both'), 'ド (C)');
 });

@@ -4,6 +4,18 @@ export const A4_DEFAULT = 442;
 
 export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 export const NOTE_NAMES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+export const NOTE_NAMES_KATA = ['ド', 'ド♯', 'レ', 'レ♯', 'ミ', 'ファ', 'ファ♯', 'ソ', 'ソ♯', 'ラ', 'ラ♯', 'シ'];
+export const NOTE_NAMES_KATA_FLAT = ['ド', 'レ♭', 'レ', 'ミ♭', 'ミ', 'ファ', 'ソ♭', 'ソ', 'ラ♭', 'ラ', 'シ♭', 'シ'];
+
+/** @param {number} pc @param {'abc'|'katakana'|'both'} style */
+export function formatPc(pc, style = 'both', preferFlat = false) {
+  const i = ((pc % 12) + 12) % 12;
+  const abc = (preferFlat ? NOTE_NAMES_FLAT : NOTE_NAMES)[i];
+  const kata = (preferFlat ? NOTE_NAMES_KATA_FLAT : NOTE_NAMES_KATA)[i];
+  if (style === 'abc') return abc;
+  if (style === 'katakana') return kata;
+  return `${kata} (${abc})`;
+}
 
 export const KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Am', 'Em', 'Dm'];
 

@@ -1,14 +1,11 @@
+import { NOTE_NAMES_KATA } from '../theory.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
-const START_PC = 0; // C
-const WHITE_COUNT = 14; // C4 to B5 range
+const WHITE_COUNT = 14;
 
-function isBlack(pc) {
-  return !WHITE_PCS.includes(pc % 12);
-}
-
-export function createKeyboard({ container, onNoteOn, onNoteOff, startOctave = 3 }) {
+export function createKeyboard({ container, onNoteOn, onNoteOff, startOctave = 3, noteStyle = 'katakana' }) {
   const root = document.createElement('div');
   root.className = 'keyboard';
   root.setAttribute('role', 'group');
@@ -45,11 +42,20 @@ export function createKeyboard({ container, onNoteOn, onNoteOff, startOctave = 3
     rect.dataset.pc = String(m % 12);
     svg.appendChild(rect);
     keys.set(m, rect);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', x + whiteW / 2);
+    label.setAttribute('y', 128);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('class', 'key-label');
+    const pc = m % 12;
+    label.textContent = noteStyle === 'abc'
+      ? ['C', 'D', 'E', 'F', 'G', 'A', 'B'][WHITE_PCS.indexOf(pc)]
+      : NOTE_NAMES_KATA[pc];
+    svg.appendChild(label);
   });
 
-  // Black keys between whites
   whiteMidis.forEach((m, i) => {
-    const pc = m % 12;
     const nextWhite = whiteMidis[i + 1];
     if (!nextWhite || nextWhite - m !== 2) return;
     const blackMidi = m + 1;
@@ -73,9 +79,9 @@ export function createKeyboard({ container, onNoteOn, onNoteOff, startOctave = 3
   let pressed = new Set();
 
   function setHighlight(pcs, className = 'target') {
-    keys.forEach((el, midi) => {
+    keys.forEach((el) => {
       el.classList.remove('target', 'pressed', 'correct', 'wrong');
-      const pc = midi % 12;
+      const pc = Number(el.dataset.pc);
       if (pcs && pcs.includes(pc)) el.classList.add(className);
     });
   }
