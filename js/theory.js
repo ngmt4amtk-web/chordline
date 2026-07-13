@@ -39,11 +39,38 @@ const QUALITY_INTERVALS = {
   M7: [0, 4, 7, 11],
   m7: [0, 3, 7, 10],
   min7: [0, 3, 7, 10],
+  mM7: [0, 3, 7, 11],
+  mMaj7: [0, 3, 7, 11],
   dim7: [0, 3, 6, 9],
   m7b5: [0, 3, 6, 10],
   '6': [0, 4, 7, 9],
   m6: [0, 3, 7, 9],
   add9: [0, 4, 7, 14],
+};
+
+/** 7th等を三和音類へ還元したクオリティ類（互換判定用） */
+const QUALITY_CLASS = {
+  '': 'major',
+  M: 'major',
+  maj: 'major',
+  '7': 'major',
+  maj7: 'major',
+  M7: 'major',
+  '6': 'major',
+  add9: 'major',
+  m: 'minor',
+  min: 'minor',
+  m7: 'minor',
+  min7: 'minor',
+  m6: 'minor',
+  mM7: 'minor',
+  mMaj7: 'minor',
+  dim: 'dim',
+  dim7: 'dim',
+  m7b5: 'dim',
+  aug: 'aug',
+  sus2: 'sus2',
+  sus4: 'sus4',
 };
 
 const SCALE_MAJOR = [0, 2, 4, 5, 7, 9, 11];
@@ -82,9 +109,9 @@ export function parseChordSymbol(symbol) {
   let qual = m[2] || '';
   if (qual === 'M') qual = '';
   if (!QUALITY_INTERVALS[qual] && qual !== '') {
-    // try common aliases
     if (qual === 'min') qual = 'm';
     else if (qual === 'maj') qual = '';
+    else if (qual === 'mMaj7') qual = 'mM7';
   }
   if (!QUALITY_INTERVALS[qual]) throw new Error(`Unknown quality: ${qual} in ${symbol}`);
 
@@ -155,7 +182,7 @@ export function romanNumeral(symbol, key) {
   if (quality.startsWith('m') || quality === 'dim' || quality === 'm7' || quality === 'm7b5') {
     if (!r.startsWith('i') && !r.startsWith('v')) r = r.toLowerCase();
   }
-  if (quality.includes('7') && !quality.includes('maj')) r += '7';
+  if (quality.includes('7') && !quality.includes('maj') && quality !== 'mM7' && quality !== 'M7') r += '7';
   return r;
 }
 
@@ -169,63 +196,315 @@ export function transposeChord(symbol, fromKey, toKey) {
   return newRoot + quality + newBass;
 }
 
+/**
+ * ダイアトニック＋借用の最小パレット（初期18進行の digForm を C/Am 例で組める集合）
+ * @type {readonly string[]}
+ */
+export const DIG_PALETTE = Object.freeze([
+  'C', 'CM7', 'C7', 'Dm', 'E', 'Em', 'E7', 'F', 'Fm', 'F7',
+  'G', 'G7', 'Am', 'AmM7', 'Am7', 'Am6', 'A7',
+]);
+
+/**
+ * 初期18進行DB（発掘形=digForm 4コード。フル形は図鑑用）
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   degrees: string,
+ *   example: string,
+ *   digForm: string[],
+ *   fullForm?: string[],
+ *   strictSlots?: boolean|boolean[],
+ *   aliases?: string[],
+ * }} Progression
+ * @type {Progression[]}
+ */
 export const PROGRESSIONS = [
   {
-    id: 'axis',
-    name: 'Axis',
-    subtitle: 'I – V – vi – IV',
-    key: 'C',
-    chords: ['C', 'G', 'Am', 'F'],
-    description: 'ポップスで最頻出の骨格。耳に残りやすい循環。',
-  },
-  {
-    id: 'doo-wop',
-    name: 'Doo-wop',
-    subtitle: 'I – vi – IV – V',
-    key: 'C',
-    chords: ['C', 'Am', 'F', 'G'],
-    description: '50年代から続く定番。終止感がはっきりする。',
-  },
-  {
-    id: 'ii-v-i',
-    name: 'ii – V – I',
-    subtitle: 'ジャズの基本解決',
-    key: 'C',
-    chords: ['Dm7', 'G7', 'Cmaj7'],
-    description: 'ドミナントからトニックへの最短ルート。',
-  },
-  {
     id: 'canon',
-    name: 'Canon',
-    subtitle: 'I – V – vi – iii – IV',
-    key: 'C',
-    chords: ['C', 'G', 'Am', 'Em', 'F'],
-    description: 'カノン進行。下行ベースの印象。',
+    name: 'カノン進行',
+    degrees: 'I–V–vi–iii',
+    example: 'C',
+    digForm: ['C', 'G', 'Am', 'Em'],
+    fullForm: ['C', 'G', 'Am', 'Em', 'F', 'C', 'F', 'G'],
+    aliases: ['Canon', 'パヘルベル'],
   },
   {
     id: 'royal-road',
+    name: '王道進行',
+    degrees: 'IV–V–iii–vi',
+    example: 'C',
+    digForm: ['F', 'G', 'Em', 'Am'],
+    aliases: ['4536'],
+  },
+  {
+    id: 'komuro',
     name: '小室進行',
-    subtitle: 'vi – IV – V – I',
-    key: 'Am',
-    chords: ['Am', 'F', 'G', 'C'],
-    description: 'J-POPでおなじみの進行。マイナー始まり。',
+    degrees: 'vi–IV–V–I',
+    example: 'Am',
+    digForm: ['Am', 'F', 'G', 'C'],
+  },
+  {
+    id: 'axis',
+    name: 'Axis進行',
+    degrees: 'I–V–vi–IV',
+    example: 'C',
+    digForm: ['C', 'G', 'Am', 'F'],
+    aliases: ['Four Chords'],
+  },
+  {
+    id: '6415',
+    name: '6415進行',
+    degrees: 'vi–IV–I–V',
+    example: 'Am',
+    digForm: ['Am', 'F', 'C', 'G'],
+    aliases: ['Axis回転'],
+  },
+  {
+    id: 'stand-by-me',
+    name: 'スタンド・バイ・ミー進行',
+    degrees: 'I–vi–IV–V',
+    example: 'C',
+    digForm: ['C', 'Am', 'F', 'G'],
+    aliases: ['Doo-wop'],
+  },
+  {
+    id: 'cycle',
+    name: '循環',
+    degrees: 'I–vi–ii–V',
+    example: 'C',
+    digForm: ['C', 'Am', 'Dm', 'G'],
+    aliases: ['Turnaround'],
+  },
+  {
+    id: '3625',
+    name: 'サンロクニーゴー',
+    degrees: 'iii–vi–ii–V',
+    example: 'C',
+    digForm: ['Em', 'Am', 'Dm', 'G'],
+  },
+  {
+    id: 'reverse-cycle',
+    name: '逆循環',
+    degrees: 'ii–V–I–VI',
+    example: 'C',
+    digForm: ['Dm', 'G', 'C', 'A7'],
+  },
+  {
+    id: 'marusa',
+    name: '丸サ進行',
+    degrees: 'IV–III7–vi–I7',
+    example: 'C',
+    digForm: ['F', 'E7', 'Am', 'C7'],
+  },
+  {
+    id: '6251',
+    name: '6251進行',
+    degrees: 'vi–ii–V–I',
+    example: 'Am',
+    digForm: ['Am', 'Dm', 'G', 'C'],
   },
   {
     id: 'blues',
-    name: 'Blues 12-bar',
-    subtitle: 'I – IV – I – V',
-    key: 'C',
-    chords: ['C7', 'C7', 'C7', 'F7', 'F7', 'C7', 'G7', 'F7', 'C7', 'G7'],
-    description: 'ブルースの骨格（短縮版10コード）。',
+    name: 'ブルース進行',
+    degrees: 'I7–IV7–I7–V7',
+    example: 'C',
+    digForm: ['C7', 'F7', 'C7', 'G7'],
+    fullForm: ['C7', 'C7', 'C7', 'C7', 'F7', 'F7', 'C7', 'C7', 'G7', 'F7', 'C7', 'G7'],
+  },
+  {
+    id: 'andalusian',
+    name: 'アンダルシア進行',
+    degrees: 'i–VII–VI–V',
+    example: 'Am',
+    digForm: ['Am', 'G', 'F', 'E'],
+  },
+  {
+    id: 'major-cliche',
+    name: 'メジャークリシェ',
+    degrees: 'I–IM7–I7–IV',
+    example: 'C',
+    digForm: ['C', 'CM7', 'C7', 'F'],
+    strictSlots: true,
+  },
+  {
+    id: 'minor-cliche',
+    name: 'マイナークリシェ',
+    degrees: 'i–iM7–i7–i6',
+    example: 'Am',
+    digForm: ['Am', 'AmM7', 'Am7', 'Am6'],
+    strictSlots: true,
+  },
+  {
+    id: 'cadence',
+    name: '基本カデンツ',
+    degrees: 'I–IV–V–I',
+    example: 'C',
+    digForm: ['C', 'F', 'G', 'C'],
+  },
+  {
+    id: 'creep',
+    name: 'Creep進行',
+    degrees: 'I–III–IV–iv',
+    example: 'C',
+    digForm: ['C', 'E', 'F', 'Fm'],
+  },
+  {
+    id: 'sd-minor',
+    name: 'サブドミナントマイナー終止',
+    degrees: 'I–IV–iv–I',
+    example: 'C',
+    digForm: ['C', 'F', 'Fm', 'C'],
   },
 ];
 
+/** @param {boolean|boolean[]|undefined} strictSlots @param {number} i */
+function isStrictSlot(strictSlots, i) {
+  if (strictSlots === true) return true;
+  if (Array.isArray(strictSlots)) return Boolean(strictSlots[i]);
+  return false;
+}
+
+/** @param {string} quality */
+export function qualityClass(quality) {
+  const cls = QUALITY_CLASS[quality];
+  if (!cls) throw new Error(`No quality class for: ${quality}`);
+  return cls;
+}
+
+/** @param {string} quality */
+function qualityIntervalsKey(quality) {
+  return QUALITY_INTERVALS[quality].join(',');
+}
+
+/**
+ * 先頭ルートを0にした相対半音列＋クオリティ（互換=類 / strict=完全）
+ * @param {string[]} chords
+ * @param {{ strictSlots?: boolean|boolean[], mode?: 'compatible'|'exact' }} [opts]
+ * @returns {{ rel: number, token: string }[]}
+ */
+export function toNormalForm(chords, opts = {}) {
+  const mode = opts.mode || 'compatible';
+  const parsed = chords.map((c) => parseChordSymbol(c));
+  const base = parsed[0].rootPc;
+  return parsed.map((p, i) => {
+    const rel = (p.rootPc - base + 12) % 12;
+    const strict = mode === 'exact' || isStrictSlot(opts.strictSlots, i);
+    const token = strict
+      ? `exact:${qualityIntervalsKey(p.quality)}`
+      : `class:${qualityClass(p.quality)}`;
+    return { rel, token };
+  });
+}
+
+function normalFormKey(form) {
+  return form.map((s) => `${s.rel}|${s.token}`).join(';');
+}
+
+/**
+ * 入力進行を1件のDBエントリと照合
+ * @returns {'exact'|'compatible'|null}
+ */
+function matchKindAgainst(inputChords, prog) {
+  const target = prog.digForm;
+  if (!inputChords || inputChords.length !== target.length) return null;
+
+  const inputParsed = inputChords.map((c) => parseChordSymbol(c));
+  const targetParsed = target.map((c) => parseChordSymbol(c));
+  const inBase = inputParsed[0].rootPc;
+  const tgBase = targetParsed[0].rootPc;
+
+  let anyCompat = false;
+  for (let i = 0; i < target.length; i++) {
+    const inRel = (inputParsed[i].rootPc - inBase + 12) % 12;
+    const tgRel = (targetParsed[i].rootPc - tgBase + 12) % 12;
+    if (inRel !== tgRel) return null;
+
+    const strict = isStrictSlot(prog.strictSlots, i);
+    if (strict) {
+      if (qualityIntervalsKey(inputParsed[i].quality) !== qualityIntervalsKey(targetParsed[i].quality)) {
+        return null;
+      }
+    } else {
+      const inCls = qualityClass(inputParsed[i].quality);
+      const tgCls = qualityClass(targetParsed[i].quality);
+      if (inCls !== tgCls) return null;
+      if (qualityIntervalsKey(inputParsed[i].quality) !== qualityIntervalsKey(targetParsed[i].quality)) {
+        anyCompat = true;
+      }
+    }
+  }
+  return anyCompat ? 'compatible' : 'exact';
+}
+
+/**
+ * @param {string[]} chords
+ * @returns {{ hit: boolean, id: string|null, name: string|null, kind: 'exact'|'compatible'|null }}
+ */
+export function matchProgression(chords) {
+  if (!Array.isArray(chords) || chords.length === 0) {
+    return { hit: false, id: null, name: null, kind: null };
+  }
+  for (const prog of PROGRESSIONS) {
+    const kind = matchKindAgainst(chords, prog);
+    if (kind) {
+      return { hit: true, id: prog.id, name: prog.name, kind };
+    }
+  }
+  return { hit: false, id: null, name: null, kind: null };
+}
+
+/**
+ * 正規形の一意性（strict枠はexactトークン、他は互換類）。衝突があれば不合格。
+ * @returns {{ ok: boolean, conflicts: { a: string, b: string, key: string }[] }}
+ */
+export function lintUniqueness() {
+  const seen = new Map();
+  const conflicts = [];
+  const names = new Map();
+
+  for (const prog of PROGRESSIONS) {
+    const form = toNormalForm(prog.digForm, { strictSlots: prog.strictSlots });
+    const key = normalFormKey(form);
+    if (seen.has(key)) {
+      conflicts.push({ a: seen.get(key), b: prog.id, key });
+    } else {
+      seen.set(key, prog.id);
+    }
+    if (names.has(prog.name)) {
+      conflicts.push({ a: names.get(prog.name), b: prog.id, key: `name:${prog.name}` });
+    } else {
+      names.set(prog.name, prog.id);
+    }
+  }
+  return { ok: conflicts.length === 0, conflicts };
+}
+
+/**
+ * digForm（および fullForm）の全コードがパレット語彙に含まれるか
+ * @param {string[]} [paletteChords]
+ * @returns {{ ok: boolean, missing: { id: string, chord: string }[] }}
+ */
+export function lintReachability(paletteChords = DIG_PALETTE) {
+  const set = new Set(paletteChords);
+  const missing = [];
+  for (const prog of PROGRESSIONS) {
+    const chords = [...prog.digForm, ...(prog.fullForm || [])];
+    for (const chord of chords) {
+      if (!set.has(chord)) missing.push({ id: prog.id, chord });
+    }
+  }
+  return { ok: missing.length === 0, missing };
+}
+
+/** @param {{ key?: string, example?: string, chords?: string[], digForm?: string[] }} prog */
 export function progressionForKey(prog, key) {
-  const fromKey = prog.key;
+  const fromKey = prog.example || prog.key;
+  const source = prog.digForm || prog.chords || [];
   return {
     ...prog,
     key,
-    chords: prog.chords.map((c) => transposeChord(c, fromKey, key)),
+    chords: source.map((c) => transposeChord(c, fromKey, key)),
   };
 }
 

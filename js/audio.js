@@ -79,6 +79,12 @@ export class Synth {
     setTimeout(() => this.playMidi(76, 0.18, 0.18), 80);
   }
 
+  /** 銘板用: 低め単音・減衰長め（確定の重さ） */
+  async playEngrave() {
+    await this.ensureRunning();
+    await this.playMidi(52, 1.4, 0.14);
+  }
+
   async playMiss() {
     await this.ensureRunning();
     await this.playMidi(58, 0.2, 0.15);

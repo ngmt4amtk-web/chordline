@@ -263,7 +263,255 @@ body {
   font-size: 0.9rem;
 }
 
+/* Home primary */
+.mode-card.mode-primary {
+  border-color: rgba(47, 111, 168, 0.28);
+  background: linear-gradient(180deg, #ffffff 0%, #f3f7fb 100%);
+}
+.home-lines { margin-top: 8px; display: block; }
+
+/* Dig */
+.dig-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dig-slot {
+  min-height: 72px;
+  padding: 12px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dig-slot.active {
+  border-color: rgba(47, 111, 168, 0.55);
+  box-shadow: 0 0 0 1px rgba(47, 111, 168, 0.18);
+}
+.dig-slot.playing {
+  border-color: var(--accent);
+  background: rgba(47, 111, 168, 0.06);
+}
+.dig-slot .slot-sym {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.dig-slot .slot-empty {
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+.dig-hint {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+}
+.dig-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  max-height: 42vh;
+  overflow: auto;
+  padding-bottom: 4px;
+}
+.dig-transport { margin-top: 4px; }
+.dig-rate {
+  margin-top: 8px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.dig-rate-label {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.dig-rate-row { display: flex; gap: 8px; }
+.dig-notice {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: var(--accent-2);
+  line-height: 1.45;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Plaque — still → chime → light → name. No confetti. */
+.plaque-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(244, 246, 249, 0.72);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+.plaque-card {
+  position: relative;
+  min-width: min(86vw, 320px);
+  padding: 28px 24px 24px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  opacity: 0.55;
+  transform: translateY(4px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.plaque-overlay.phase-chime .plaque-card,
+.plaque-overlay.phase-light .plaque-card,
+.plaque-overlay.phase-name .plaque-card {
+  opacity: 1;
+  transform: translateY(0);
+}
+.plaque-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(47, 111, 168, 0.14) 50%, transparent 65%);
+  opacity: 0;
+  transform: translateX(-40%);
+  pointer-events: none;
+}
+.plaque-overlay.phase-light .plaque-light,
+.plaque-overlay.phase-name .plaque-light {
+  opacity: 1;
+  animation: plaque-sweep 0.7s ease forwards;
+}
+@keyframes plaque-sweep {
+  from { transform: translateX(-50%); opacity: 0.2; }
+  to { transform: translateX(50%); opacity: 0; }
+}
+.plaque-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  color: var(--ink-dim);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.plaque-overlay.phase-name .plaque-kicker { opacity: 1; }
+.plaque-name {
+  margin: 10px 0 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.plaque-overlay.phase-name .plaque-name { opacity: 1; }
+.plaque-degrees {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity 0.35s ease 0.05s;
+}
+.plaque-overlay.phase-name .plaque-degrees { opacity: 1; }
+
+/* Dex */
+.dex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dex-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.dex-row.silhouette {
+  background: var(--surface-2);
+  cursor: default;
+  opacity: 0.72;
+}
+.dex-row.found:hover {
+  border-color: rgba(47, 111, 168, 0.35);
+}
+.dex-name { font-size: 0.95rem; font-weight: 600; }
+.dex-deg { font-size: 0.78rem; color: var(--ink-soft); font-family: var(--font-mono); }
+.dex-name.muted, .dex-deg.muted { color: var(--ink-dim); font-weight: 400; }
+.dex-hint {
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.dex-specimen { margin-bottom: 14px; }
+.dex-label {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+.dex-chords { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.static { cursor: default; }
+.dex-actions { flex-direction: column; align-items: stretch; }
+.dex-actions .btn { width: 100%; }
+
+/* Chunk */
+.chunk-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.chunk-timer {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+.chunk-result-score {
+  margin: 16px 0 8px;
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.chunk-result-line {
+  max-width: 28em;
+  line-height: 1.55;
+}
+
+.myline-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.myline-play { width: 100%; }
+.myline-load {
+  align-self: flex-start;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 380px) {
   .timeline-cell { flex: 1 1 calc(50% - 8px); }
   .chord-big { font-size: 2.4rem; }
+  .dig-slot { min-height: 64px; }
+  .plaque-name { font-size: 1.25rem; }
 }
