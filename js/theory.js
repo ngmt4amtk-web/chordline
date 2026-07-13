@@ -48,6 +48,30 @@ const QUALITY_INTERVALS = {
   add9: [0, 4, 7, 14],
 };
 
+const QUALITY_DEGREES = {
+  '': [0, 2, 4],
+  M: [0, 2, 4],
+  maj: [0, 2, 4],
+  m: [0, 2, 4],
+  min: [0, 2, 4],
+  dim: [0, 2, 4],
+  aug: [0, 2, 4],
+  sus2: [0, 1, 4],
+  sus4: [0, 3, 4],
+  '7': [0, 2, 4, 6],
+  maj7: [0, 2, 4, 6],
+  M7: [0, 2, 4, 6],
+  m7: [0, 2, 4, 6],
+  min7: [0, 2, 4, 6],
+  mM7: [0, 2, 4, 6],
+  mMaj7: [0, 2, 4, 6],
+  dim7: [0, 2, 4, 6],
+  m7b5: [0, 2, 4, 6],
+  '6': [0, 2, 4, 5],
+  m6: [0, 2, 4, 5],
+  add9: [0, 2, 4, 1],
+};
+
 /** 7th等を三和音類へ還元したクオリティ類（互換判定用） */
 const QUALITY_CLASS = {
   '': 'major',
@@ -72,6 +96,11 @@ const QUALITY_CLASS = {
   sus2: 'sus2',
   sus4: 'sus4',
 };
+
+const SEVENTH_COMPATIBLE = new Set([
+  '', 'M', 'maj', '7', 'maj7', 'M7',
+  'm', 'min', 'm7', 'min7', 'mM7', 'mMaj7',
+]);
 
 const SCALE_MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const SCALE_MINOR = [0, 2, 3, 5, 7, 8, 10];
@@ -121,6 +150,45 @@ export function parseChordSymbol(symbol) {
 export function chordPcs(symbol) {
   const { rootPc, quality } = parseChordSymbol(symbol);
   return QUALITY_INTERVALS[quality].map((i) => (rootPc + i) % 12);
+}
+
+const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const NATURAL_PCS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const LETTER_KATAKANA = { C: 'ド', D: 'レ', E: 'ミ', F: 'ファ', G: 'ソ', A: 'ラ', B: 'シ' };
+
+function accidentalFor(delta) {
+  if (delta === -2) return '♭♭';
+  if (delta === -1) return '♭';
+  if (delta === 1) return '♯';
+  if (delta === 2) return '♯♯';
+  return '';
+}
+
+/**
+ * ルートの綴りを保ってコード構成音を返す（例: C# → C#, E#, G#）。
+ * @param {string} symbol
+ * @param {'abc'|'katakana'|'both'} style
+ */
+export function spellChordTones(symbol, style = 'abc') {
+  const parsed = parseChordSymbol(symbol);
+  const rootMatch = symbol.trim().match(/^([A-G])([#b]?)/);
+  if (!rootMatch) return chordPcs(symbol).map((pc) => formatPc(pc, style));
+  const rootIndex = LETTERS.indexOf(rootMatch[1]);
+  const intervals = QUALITY_INTERVALS[parsed.quality];
+  const degrees = QUALITY_DEGREES[parsed.quality] || intervals.map((_, i) => i * 2);
+
+  return intervals.map((interval, i) => {
+    const letter = LETTERS[(rootIndex + degrees[i]) % LETTERS.length];
+    const targetPc = (parsed.rootPc + interval) % 12;
+    let delta = (targetPc - NATURAL_PCS[letter] + 12) % 12;
+    if (delta > 6) delta -= 12;
+    const accidental = accidentalFor(delta);
+    const abc = `${letter}${accidental}`;
+    const kata = `${LETTER_KATAKANA[letter]}${accidental}`;
+    if (style === 'katakana') return kata;
+    if (style === 'both') return `${kata} (${abc})`;
+    return abc;
+  });
 }
 
 export function chordMidis(symbol, octave = 4) {
@@ -429,7 +497,12 @@ function matchKindAgainst(inputChords, prog) {
       const inCls = qualityClass(inputParsed[i].quality);
       const tgCls = qualityClass(targetParsed[i].quality);
       if (inCls !== tgCls) return null;
-      if (qualityIntervalsKey(inputParsed[i].quality) !== qualityIntervalsKey(targetParsed[i].quality)) {
+      const sameIntervals = qualityIntervalsKey(inputParsed[i].quality)
+        === qualityIntervalsKey(targetParsed[i].quality);
+      if (!sameIntervals) {
+        // 三和音と7th系だけを互換扱いにする。6/add9 は過大ヒットになる。
+        if (!SEVENTH_COMPATIBLE.has(inputParsed[i].quality)
+          || !SEVENTH_COMPATIBLE.has(targetParsed[i].quality)) return null;
         anyCompat = true;
       }
     }

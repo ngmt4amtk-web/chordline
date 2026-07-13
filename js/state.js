@@ -4,7 +4,6 @@ const STORAGE_KEY = 'chordline:v2';
 // v1 は読まない・消さない
 
 const defaults = {
-  screen: 'home',
   key: 'C',
   showRoman: true,
   noteStyle: 'both',
@@ -16,12 +15,14 @@ const defaults = {
   unlockedChords: [],
   /** @type {{ chords: string[], at: number }[]} */
   myLines: [],
+  /** @type {Record<string, 'good'|'meh'>} */
+  ratings: {},
 };
 
 export function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...defaults, discovered: {}, unlockedChords: [], myLines: [] };
+    if (!raw) return { ...defaults, discovered: {}, unlockedChords: [], myLines: [], ratings: {} };
     const parsed = JSON.parse(raw);
     return {
       ...defaults,
@@ -29,9 +30,10 @@ export function loadState() {
       discovered: parsed.discovered && typeof parsed.discovered === 'object' ? parsed.discovered : {},
       unlockedChords: Array.isArray(parsed.unlockedChords) ? parsed.unlockedChords : [],
       myLines: Array.isArray(parsed.myLines) ? parsed.myLines : [],
+      ratings: parsed.ratings && typeof parsed.ratings === 'object' ? parsed.ratings : {},
     };
   } catch {
-    return { ...defaults, discovered: {}, unlockedChords: [], myLines: [] };
+    return { ...defaults, discovered: {}, unlockedChords: [], myLines: [], ratings: {} };
   }
 }
 
@@ -46,6 +48,7 @@ export function saveState(state) {
       discovered: state.discovered || {},
       unlockedChords: state.unlockedChords || [],
       myLines: state.myLines || [],
+      ratings: state.ratings || {},
     }));
   } catch (_) {}
 }
@@ -80,9 +83,11 @@ export function registerDiscovery(state, id, playedChords = []) {
 
 export function saveMyLine(state, chords) {
   const entry = { chords: [...chords], at: Date.now() };
+  const key = entry.chords.join('|');
+  const previous = (state.myLines || []).filter((line) => line.chords?.join('|') !== key);
   return {
     ...state,
-    myLines: [entry, ...(state.myLines || [])].slice(0, 40),
+    myLines: [entry, ...previous].slice(0, 40),
   };
 }
 

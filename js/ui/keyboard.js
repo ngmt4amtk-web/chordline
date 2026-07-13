@@ -1,122 +1,180 @@
 import { NOTE_NAMES_KATA } from '../theory.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
 const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
-const WHITE_COUNT = 14;
+const ABC = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
+function labelFor(pc, style) {
+  return style === 'abc' ? ABC[pc] : NOTE_NAMES_KATA[pc];
+}
+
+/** 1オクターブ12音。白鍵は約50px、黒鍵は透明ヒット領域を44px以上にする。 */
 export function createKeyboard({ container, onNoteOn, onNoteOff, startOctave = 3, noteStyle = 'katakana' }) {
   const root = document.createElement('div');
   root.className = 'keyboard';
   root.setAttribute('role', 'group');
-  root.setAttribute('aria-label', 'Piano keyboard');
+  root.setAttribute('aria-label', 'ピアノ鍵盤');
 
   const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 700 160');
+  svg.setAttribute('viewBox', '0 0 700 200');
   svg.setAttribute('class', 'keyboard-svg');
 
-  const whiteW = 700 / WHITE_COUNT;
-  const blackW = whiteW * 0.58;
-  const blackH = 96;
-
-  const keys = new Map();
+  const whiteW = 100;
+  const blackVisualW = 58;
+  const blackHitW = 100;
   const startMidi = (startOctave + 1) * 12;
+  const keys = new Map();
 
-  const whiteMidis = [];
-  let midi = startMidi;
-  while (whiteMidis.length < WHITE_COUNT) {
-    if (WHITE_PCS.includes(midi % 12)) whiteMidis.push(midi);
-    midi++;
-  }
-
-  whiteMidis.forEach((m, i) => {
-    const x = i * whiteW;
+  WHITE_PCS.forEach((pc, i) => {
+    const midi = startMidi + pc;
     const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', x + 1);
+    rect.setAttribute('x', i * whiteW + 1);
     rect.setAttribute('y', 0);
     rect.setAttribute('width', whiteW - 2);
-    rect.setAttribute('height', 140);
-    rect.setAttribute('rx', 2);
+    rect.setAttribute('height', 184);
+    rect.setAttribute('rx', 3);
     rect.setAttribute('class', 'key white');
-    rect.dataset.midi = String(m);
-    rect.dataset.pc = String(m % 12);
+    rect.dataset.midi = String(midi);
+    rect.dataset.pc = String(pc);
+    rect.setAttribute('role', 'button');
+    rect.setAttribute('tabindex', '0');
+    rect.setAttribute('aria-label', labelFor(pc, noteStyle));
     svg.appendChild(rect);
-    keys.set(m, rect);
+    keys.set(midi, rect);
 
     const label = document.createElementNS(SVG_NS, 'text');
-    label.setAttribute('x', x + whiteW / 2);
-    label.setAttribute('y', 128);
+    label.setAttribute('x', i * whiteW + whiteW / 2);
+    label.setAttribute('y', 166);
     label.setAttribute('text-anchor', 'middle');
     label.setAttribute('class', 'key-label');
-    const pc = m % 12;
-    label.textContent = noteStyle === 'abc'
-      ? ['C', 'D', 'E', 'F', 'G', 'A', 'B'][WHITE_PCS.indexOf(pc)]
-      : NOTE_NAMES_KATA[pc];
+    label.textContent = labelFor(pc, noteStyle);
     svg.appendChild(label);
   });
 
-  whiteMidis.forEach((m, i) => {
-    const nextWhite = whiteMidis[i + 1];
-    if (!nextWhite || nextWhite - m !== 2) return;
-    const blackMidi = m + 1;
-    const x = (i + 1) * whiteW - blackW / 2;
+  const blackPcs = [1, 3, 6, 8, 10];
+  const blackCenters = [100, 200, 400, 500, 600];
+  blackPcs.forEach((pc, i) => {
+    const midi = startMidi + pc;
+    const center = blackCenters[i];
     const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', x);
+    rect.setAttribute('x', center - blackVisualW / 2);
     rect.setAttribute('y', 0);
-    rect.setAttribute('width', blackW);
-    rect.setAttribute('height', blackH);
-    rect.setAttribute('rx', 2);
+    rect.setAttribute('width', blackVisualW);
+    rect.setAttribute('height', 116);
+    rect.setAttribute('rx', 3);
     rect.setAttribute('class', 'key black');
-    rect.dataset.midi = String(blackMidi);
-    rect.dataset.pc = String(blackMidi % 12);
+    rect.dataset.pc = String(pc);
     svg.appendChild(rect);
-    keys.set(blackMidi, rect);
+    keys.set(midi, rect);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', center);
+    label.setAttribute('y', 102);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('class', 'key-label black-label');
+    label.textContent = labelFor(pc, noteStyle);
+    svg.appendChild(label);
+
+    const hit = document.createElementNS(SVG_NS, 'rect');
+    hit.setAttribute('x', center - blackHitW / 2);
+    hit.setAttribute('y', 0);
+    hit.setAttribute('width', blackHitW);
+    hit.setAttribute('height', 132);
+    hit.setAttribute('class', 'key-hit');
+    hit.dataset.midi = String(midi);
+    hit.dataset.pc = String(pc);
+    hit.setAttribute('role', 'button');
+    hit.setAttribute('tabindex', '0');
+    hit.setAttribute('aria-label', labelFor(pc, noteStyle));
+    svg.appendChild(hit);
   });
 
   root.appendChild(svg);
   container.appendChild(root);
 
-  let pressed = new Set();
+  const pressed = new Set();
+
+  function visualFor(target) {
+    return keys.get(Number(target.dataset.midi));
+  }
+
+  function activate(target) {
+    const midi = Number(target.dataset.midi);
+    const pc = Number(target.dataset.pc);
+    const visual = visualFor(target);
+    pressed.add(midi);
+    visual?.classList.add('pressed');
+    onNoteOn?.({ midi, pc });
+  }
+
+  function release(target) {
+    const midi = Number(target.dataset.midi);
+    const pc = Number(target.dataset.pc);
+    if (!pressed.has(midi)) return;
+    pressed.delete(midi);
+    visualFor(target)?.classList.remove('pressed');
+    onNoteOff?.({ midi, pc });
+  }
+
+  function keyTarget(event) {
+    return event.target.closest('[data-midi]');
+  }
+
+  svg.addEventListener('pointerdown', (event) => {
+    const target = keyTarget(event);
+    if (!target) return;
+    event.preventDefault();
+    activate(target);
+  });
+  svg.addEventListener('pointerup', (event) => {
+    const target = keyTarget(event);
+    if (target) release(target);
+  });
+  svg.addEventListener('pointerleave', () => {
+    for (const midi of pressed) {
+      keys.get(midi)?.classList.remove('pressed');
+      onNoteOff?.({ midi, pc: midi % 12 });
+    }
+    pressed.clear();
+  });
+  svg.addEventListener('keydown', (event) => {
+    if (!['Enter', ' '].includes(event.key)) return;
+    const target = keyTarget(event);
+    if (!target) return;
+    event.preventDefault();
+    activate(target);
+    release(target);
+  });
+
+  function clearClasses() {
+    keys.forEach((key) => key.classList.remove('target', 'pressed', 'correct', 'wrong'));
+  }
 
   function setHighlight(pcs, className = 'target') {
-    keys.forEach((el) => {
-      el.classList.remove('target', 'pressed', 'correct', 'wrong');
-      const pc = Number(el.dataset.pc);
-      if (pcs && pcs.includes(pc)) el.classList.add(className);
+    clearClasses();
+    keys.forEach((key) => {
+      const pc = Number(key.dataset.pc);
+      if (pcs?.includes(pc)) key.classList.add(className);
     });
   }
-
-  function handlePointer(e) {
-    const key = e.target.closest('.key');
-    if (!key) return;
-    const midi = Number(key.dataset.midi);
-    const pc = Number(key.dataset.pc);
-    if (e.type === 'pointerdown') {
-      pressed.add(midi);
-      key.classList.add('pressed');
-      onNoteOn?.({ midi, pc });
-    } else if (e.type === 'pointerup' || e.type === 'pointerleave') {
-      if (pressed.has(midi)) {
-        pressed.delete(midi);
-        key.classList.remove('pressed');
-        onNoteOff?.({ midi, pc });
-      }
-    }
-  }
-
-  svg.addEventListener('pointerdown', handlePointer);
-  svg.addEventListener('pointerup', handlePointer);
-  svg.addEventListener('pointerleave', handlePointer);
 
   return {
     el: root,
     setHighlight,
+    setSelection(pcs) {
+      setHighlight(pcs, 'target');
+    },
+    showResult(correctPcs, selectedPcs) {
+      clearClasses();
+      keys.forEach((key) => {
+        const pc = Number(key.dataset.pc);
+        if (correctPcs?.includes(pc)) key.classList.add('correct');
+        else if (selectedPcs?.includes(pc)) key.classList.add('wrong');
+      });
+    },
     flashResult(ok) {
-      keys.forEach((el) => {
-        if (el.classList.contains('target') || el.classList.contains('pressed')) {
-          el.classList.add(ok ? 'correct' : 'wrong');
-          setTimeout(() => el.classList.remove('correct', 'wrong'), 400);
-        }
+      keys.forEach((key) => {
+        if (key.classList.contains('target')) key.classList.add(ok ? 'correct' : 'wrong');
       });
     },
     destroy() {

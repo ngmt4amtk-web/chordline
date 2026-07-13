@@ -16,6 +16,7 @@ import {
   qualityClass,
   lintUniqueness,
   lintReachability,
+  spellChordTones,
 } from '../js/theory.js';
 
 test('parseChordSymbol basics', () => {
@@ -225,4 +226,15 @@ test('1差ミスは非ヒット', () => {
   assert.equal(matchProgression(['F', 'G', 'Em', 'Dm']).hit, false);
   // Axisの最後が王道寄り
   assert.equal(matchProgression(['C', 'G', 'Am', 'Em']).id, 'canon');
+});
+
+test('6/add9 は7th互換に含めない', () => {
+  const overmatch = matchProgression(['C6', 'Gadd9', 'Am6', 'FM7']);
+  assert.equal(overmatch.hit, false);
+});
+
+test('構成音の綴りはルート文脈を保つ', () => {
+  assert.deepEqual(spellChordTones('C#', 'abc'), ['C♯', 'E♯', 'G♯']);
+  assert.deepEqual(spellChordTones('Db', 'abc'), ['D♭', 'F', 'A♭']);
+  assert.deepEqual(spellChordTones('Bb7', 'katakana'), ['シ♭', 'レ', 'ファ', 'ラ♭']);
 });

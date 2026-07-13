@@ -1,44 +1,58 @@
 import { Synth } from './audio.js';
 import { PlaybackEngine } from './engine.js';
 import {
+  isDiscovered,
   loadState,
-  saveState,
   registerDiscovery,
   saveMyLine,
-  isDiscovered,
+  saveState,
 } from './state.js';
-import { renderApp, pcsMatch, chordPcs } from './ui/screens.js';
-import { matchProgression, PROGRESSIONS } from './theory.js';
+import {
+  PROGRESSIONS,
+  chordPcs,
+  matchProgression,
+  pcsMatch,
+} from './theory.js';
+import {
+  buildToneSession,
+  finishToneSession,
+  loadTonesState,
+  recordToneAttempt,
+  saveTonesState,
+} from './tones.js';
+import { renderApp } from './ui/screens.js';
 
 const root = document.getElementById('app');
 const synth = new Synth();
 const engine = new PlaybackEngine(synth);
+const saved = loadState();
 
 let state = {
-  ...loadState(),
-  screen: 'home',
+  ...saved,
+  mode: 'dig',
+  settingsOpen: false,
+  libraryOpen: window.matchMedia?.('(min-width: 760px)').matches || false,
+  libraryDetailId: null,
   playing: false,
   playIndex: -1,
   slots: [null, null, null, null],
   activeSlot: 0,
-  digPhase: 'edit',
+  hasListened: false,
+  digRated: false,
   digNotice: '',
   plaque: null,
-  dexId: null,
-  chunkActive: false,
-  chunkResult: null,
-  chunkTarget: null,
-  chunkSelected: [],
-  chunkScore: 0,
-  chunkRemain: 60,
-  chunkTimer: null,
+  tones: loadTonesState(),
+  toneSession: null,
   _kb: null,
-  _plaqueLock: false,
-  _chunkChecking: false,
+  _tonesView: null,
 };
 
 function persist() {
   saveState(state);
+}
+
+function persistTones() {
+  saveTonesState(state.tones);
 }
 
 function rerender() {
@@ -46,7 +60,7 @@ function rerender() {
     state._kb.destroy();
     state._kb = null;
   }
-  renderApp({ root, state, synth, engine, actions });
+  renderApp({ root, state, actions });
 }
 
 function stopPlayback() {
@@ -55,82 +69,46 @@ function stopPlayback() {
   state.playIndex = -1;
 }
 
-function clearChunkTimer() {
-  if (state.chunkTimer) {
-    clearInterval(state.chunkTimer);
-    state.chunkTimer = null;
-  }
+function resetDigAfterEdit() {
+  state.hasListened = false;
+  state.digRated = false;
+  state.digNotice = '';
+  state.plaque = null;
 }
 
-function pickChunkTarget() {
-  const pool = state.unlockedChords || [];
-  if (!pool.length) return null;
-  let next = pool[Math.floor(Math.random() * pool.length)];
-  if (pool.length > 1 && next === state.chunkTarget) {
-    next = pool[(pool.indexOf(next) + 1) % pool.length];
-  }
-  return next;
-}
-
-function delay(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function chunkResultLine(score) {
-  if (score <= 0) return '耳は温まっている。また掘ろう。';
-  if (score <= 3) return '手がコードの輪郭を覚え始めている。';
-  if (score <= 7) return '塊として掴める瞬間が増えた。';
-  return '語彙が身体に残っている。';
-}
-
-function endChunkSession() {
-  clearChunkTimer();
-  const score = state.chunkScore || 0;
-  state.chunkActive = false;
-  state._chunkChecking = false;
-  state.chunkResult = {
-    score,
-    line: chunkResultLine(score),
+function makeToneSession() {
+  return {
+    queue: buildToneSession({ cells: state.tones.cells }),
+    index: 0,
+    selected: [],
+    hintLevel: 0,
+    confirmed: false,
+    correct: null,
+    currentResult: null,
+    results: [],
+    complete: false,
   };
-  stopPlayback();
-  rerender();
 }
 
 const actions = {
-  goHome() {
+  switchMode(mode) {
+    if (!['dig', 'tones'].includes(mode)) return;
     stopPlayback();
-    clearChunkTimer();
-    state.chunkActive = false;
-    state.chunkResult = null;
-    state._chunkChecking = false;
+    state.mode = mode;
+    state.settingsOpen = false;
     state.plaque = null;
-    state._plaqueLock = false;
-    state.screen = 'home';
-    state.digNotice = '';
-    rerender();
-  },
-
-  openScreen(screen) {
-    stopPlayback();
-    clearChunkTimer();
-    state.chunkActive = false;
-    state.chunkResult = null;
-    state._chunkChecking = false;
-    state.plaque = null;
-    state._plaqueLock = false;
-    state.screen = screen;
-    state.digNotice = '';
+    if (mode === 'tones' && !state.toneSession) state.toneSession = makeToneSession();
     rerender();
   },
 
   openSettings() {
-    actions.openScreen('settings');
+    stopPlayback();
+    state.settingsOpen = true;
+    rerender();
   },
 
-  openDexDetail(id) {
-    stopPlayback();
-    state.dexId = id;
-    state.screen = 'dex-detail';
+  closeSettings() {
+    state.settingsOpen = false;
     rerender();
   },
 
@@ -140,95 +118,85 @@ const actions = {
     rerender();
   },
 
-  setShowRoman(v) {
-    state.showRoman = v;
+  setShowRoman(value) {
+    state.showRoman = value;
     persist();
     rerender();
   },
 
-  setNoteStyle(v) {
-    state.noteStyle = v;
+  setNoteStyle(value) {
+    state.noteStyle = value;
     persist();
     rerender();
   },
 
-  setVolume(v) {
-    state.volume = v;
-    synth.setVolume(v);
+  setVolume(value) {
+    state.volume = value;
+    synth.setVolume(value);
     persist();
   },
 
-  setTempo(t) {
-    state.tempo = t;
+  setTempo(value) {
+    state.tempo = value;
     persist();
   },
 
-  selectSlot(i) {
-    if (state._plaqueLock) return;
+  selectSlot(index) {
     stopPlayback();
-    if (state.slots[i] && state.activeSlot === i) {
-      state.slots[i] = null;
-      state.digPhase = 'edit';
-      state.digNotice = '';
-    }
-    state.activeSlot = i;
+    state.activeSlot = index;
     rerender();
   },
 
-  clearSlot(i) {
-    if (state._plaqueLock) return;
+  clearSlot(index) {
     stopPlayback();
-    state.slots[i] = null;
-    state.activeSlot = i;
-    state.digPhase = 'edit';
-    state.digNotice = '';
+    state.slots = [...state.slots];
+    state.slots[index] = null;
+    state.activeSlot = index;
+    resetDigAfterEdit();
     rerender();
   },
 
-  placeChord(sym) {
-    if (state._plaqueLock) return;
+  placeChord(symbol) {
     stopPlayback();
-    const slots = [...(state.slots || [null, null, null, null])];
-    let idx = state.activeSlot ?? 0;
-    if (slots[idx]) {
-      const empty = slots.findIndex((c) => !c);
-      if (empty >= 0) idx = empty;
-    }
-    slots[idx] = sym;
+    const slots = [...state.slots];
+    const index = state.activeSlot ?? 0;
+    slots[index] = symbol;
     state.slots = slots;
-    state.activeSlot = Math.min(idx + 1, 3);
-    state.digPhase = 'edit';
-    state.digNotice = '';
-    engine.playChord(sym).catch(() => {});
+    const nextEmpty = slots.findIndex((item, slotIndex) => !item && slotIndex > index);
+    const firstEmpty = slots.findIndex((item) => !item);
+    state.activeSlot = nextEmpty >= 0 ? nextEmpty : (firstEmpty >= 0 ? firstEmpty : index);
+    resetDigAfterEdit();
+    engine.playChord(symbol).catch(() => {});
     rerender();
   },
 
   async toggleDigPlay() {
-    if (state._plaqueLock) return;
     if (state.playing) {
       stopPlayback();
       rerender();
       return;
     }
-    const chords = (state.slots || []).filter(Boolean);
+    const chords = state.slots.filter(Boolean);
     if (chords.length !== 4) return;
     state.playing = true;
+    state.playIndex = -1;
+    state.digRated = false;
     state.digNotice = '';
     rerender();
-    let done = false;
+    let completed = false;
     try {
-      done = await engine.playSequence(chords, state.tempo, (i) => {
-        state.playIndex = i;
-        document.querySelectorAll('.dig-slot').forEach((el, idx) => {
-          el.classList.toggle('playing', idx === i);
+      completed = await engine.playSequence(chords, state.tempo, (index) => {
+        state.playIndex = index;
+        document.querySelectorAll('.dig-slot').forEach((slot, slotIndex) => {
+          slot.classList.toggle('playing', slotIndex === index);
         });
       });
-      if (done) state.digPhase = 'rated';
+      if (completed) state.hasListened = true;
     } catch (_) {
-      done = false;
+      completed = false;
       stopPlayback();
     } finally {
-      if (done || !engine.playing) {
+      if (completed || !engine.playing) {
         state.playing = false;
         state.playIndex = -1;
         rerender();
@@ -236,73 +204,76 @@ const actions = {
     }
   },
 
-  rateMeh() {
-    if (state._plaqueLock) return;
-    state.digPhase = 'edit';
-    state.digNotice = '続けて並べ替えられる。';
-    rerender();
-  },
-
-  async rateGood() {
-    if (state._plaqueLock) return;
-    const chords = (state.slots || []).filter(Boolean);
-    if (chords.length !== 4) return;
-
+  rateDig(rating) {
+    const chords = state.slots.filter(Boolean);
+    if (chords.length !== 4 || !state.hasListened || state.playing || state.digRated) return;
+    state.digRated = true;
     const hit = matchProgression(chords);
+
     if (!hit.hit) {
-      const saved = saveMyLine(state, chords);
-      state.myLines = saved.myLines;
-      state.digPhase = 'edit';
-      state.digNotice = 'マイラインに残した。図鑑の進行ではなかった。';
-      persist();
+      if (rating === 'good') {
+        const savedLine = saveMyLine(state, chords);
+        state.myLines = savedLine.myLines;
+        state.digNotice = '図鑑名はない。響きは「未登録の棚」に残した。';
+        persist();
+      } else {
+        state.digNotice = '図鑑名はない。コードを入れ替えて次を試せる。';
+      }
       rerender();
       return;
     }
 
-    // 再発見: 銘板なし
-    if (isDiscovered(state, hit.id)) {
-      state.digPhase = 'edit';
-      state.digNotice = `既知: ${hit.name}`;
-      rerender();
-      return;
+    const wasDiscovered = isDiscovered(state, hit.id);
+    if (!wasDiscovered) {
+      const registered = registerDiscovery(state, hit.id, chords);
+      state.discovered = registered.discovered;
+      state.unlockedChords = registered.unlockedChords;
     }
+    state.ratings = { ...(state.ratings || {}), [hit.id]: rating };
+    persist();
 
-    const prog = PROGRESSIONS.find((p) => p.id === hit.id);
-    state._plaqueLock = true;
-    state.digPhase = 'edit';
-    state.digNotice = '';
+    const progression = PROGRESSIONS.find((item) => item.id === hit.id);
     state.plaque = {
       id: hit.id,
       name: hit.name,
-      degrees: prog?.degrees || '',
-      phase: 'still',
+      degrees: progression?.degrees || '',
+      rating,
+      isNew: !wasDiscovered,
     };
+    state.digNotice = wasDiscovered
+      ? `既知の ${hit.name}。評価を更新した。`
+      : `${hit.name} を図鑑に刻んだ。`;
     rerender();
+    synth.playEngrave().catch(() => {});
+  },
 
-    await delay(380);
-    if (!state.plaque) return;
-    state.plaque = { ...state.plaque, phase: 'chime' };
-    rerender();
-    await synth.playEngrave();
-    await delay(180);
-
-    if (!state.plaque) return;
-    state.plaque = { ...state.plaque, phase: 'light' };
-    rerender();
-    await delay(520);
-
-    if (!state.plaque) return;
-    state.plaque = { ...state.plaque, phase: 'name' };
-    const registered = registerDiscovery(state, hit.id, chords);
-    state.discovered = registered.discovered;
-    state.unlockedChords = registered.unlockedChords;
-    persist();
-    rerender();
-    await delay(1600);
-
+  dismissPlaque() {
     state.plaque = null;
-    state._plaqueLock = false;
-    state.digNotice = `${hit.name} を図鑑に刻印した。`;
+    rerender();
+  },
+
+  showDiscovery(id) {
+    state.plaque = null;
+    state.libraryOpen = true;
+    state.libraryDetailId = id;
+    rerender();
+    requestAnimationFrame(() => document.getElementById('library')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  },
+
+  toggleLibrary() {
+    state.libraryOpen = !state.libraryOpen;
+    if (!state.libraryOpen) state.libraryDetailId = null;
+    rerender();
+  },
+
+  openLibraryDetail(id) {
+    state.libraryOpen = true;
+    state.libraryDetailId = id;
+    rerender();
+  },
+
+  closeLibraryDetail() {
+    state.libraryDetailId = null;
     rerender();
   },
 
@@ -315,130 +286,119 @@ const actions = {
     }
     state.playing = true;
     rerender();
-    let done = false;
     try {
-      done = await engine.playSequence(chords, state.tempo, (i) => {
-        state.playIndex = i;
-      });
+      await engine.playSequence(chords, state.tempo);
     } catch (_) {
-      done = false;
       stopPlayback();
     } finally {
-      if (done || !engine.playing) {
-        state.playing = false;
-        state.playIndex = -1;
-        rerender();
-      }
+      state.playing = false;
+      state.playIndex = -1;
+      rerender();
     }
   },
 
   redigFrom(id) {
-    const prog = PROGRESSIONS.find((p) => p.id === id);
-    if (!prog) return;
+    const progression = PROGRESSIONS.find((item) => item.id === id);
+    if (!progression) return;
     stopPlayback();
-    state.slots = [...prog.digForm];
+    state.mode = 'dig';
+    state.slots = [...progression.digForm];
     state.activeSlot = 0;
-    state.digPhase = 'edit';
-    state.digNotice = `${prog.name} の発掘形を載せた。`;
-    state.screen = 'dig';
-    state.plaque = null;
+    state.libraryOpen = false;
+    state.libraryDetailId = null;
+    resetDigAfterEdit();
+    state.digNotice = `${progression.name} の並びを載せた。再生して確かめられる。`;
     rerender();
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
   },
 
   loadMyLineToDig(chords) {
     if (!chords?.length) return;
     stopPlayback();
-    const four = [...chords].slice(0, 4);
-    while (four.length < 4) four.push(null);
-    state.slots = four;
-    state.activeSlot = four.findIndex((c) => !c);
-    if (state.activeSlot < 0) state.activeSlot = 0;
-    state.digPhase = 'edit';
-    state.digNotice = 'マイラインを発掘スロットに戻した。';
-    state.screen = 'dig';
-    state.plaque = null;
+    const slots = [...chords].slice(0, 4);
+    while (slots.length < 4) slots.push(null);
+    state.mode = 'dig';
+    state.slots = slots;
+    state.activeSlot = Math.max(0, slots.findIndex((item) => !item));
+    state.libraryOpen = false;
+    state.libraryDetailId = null;
+    resetDigAfterEdit();
+    state.digNotice = '保存した響きをスロットへ戻した。';
     rerender();
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
   },
 
-  startChunk() {
+  startToneSession() {
     stopPlayback();
-    clearChunkTimer();
-    state.chunkResult = null;
-    state._chunkChecking = false;
-    const target = pickChunkTarget();
-    if (!target) {
-      state.screen = 'chunk';
+    state.mode = 'tones';
+    state.toneSession = makeToneSession();
+    rerender();
+  },
+
+  toggleTonePc(pc) {
+    const session = state.toneSession;
+    if (!session || session.complete || session.confirmed) return;
+    const selected = [...(session.selected || [])];
+    const index = selected.indexOf(pc);
+    if (index >= 0) selected.splice(index, 1);
+    else selected.push(pc);
+    session.selected = selected;
+    if (state._tonesView) state._tonesView.updateSelection(selected);
+    else rerender();
+  },
+
+  useToneHint() {
+    const session = state.toneSession;
+    if (!session || session.complete || session.confirmed || session.hintLevel >= 3) return;
+    session.hintLevel += 1;
+    rerender();
+  },
+
+  confirmToneAnswer() {
+    const session = state.toneSession;
+    if (!session || session.complete || session.confirmed || !session.selected.length) return;
+    const symbol = session.queue[session.index];
+    const correct = pcsMatch(session.selected, chordPcs(symbol));
+    const result = { symbol, correct, hintLevel: session.hintLevel };
+    state.tones = recordToneAttempt(state.tones, result);
+    session.confirmed = true;
+    session.correct = correct;
+    session.currentResult = result;
+    persistTones();
+    rerender();
+    synth.playChord(symbol).catch(() => {});
+  },
+
+  nextToneQuestion() {
+    const session = state.toneSession;
+    if (!session?.confirmed || !session.currentResult) return;
+    const results = [...session.results, session.currentResult];
+    if (session.index + 1 >= session.queue.length) {
+      state.tones = finishToneSession(state.tones, results);
+      persistTones();
+      state.toneSession = { ...session, results, complete: true };
       rerender();
       return;
     }
-    state.chunkActive = true;
-    state.chunkTarget = target;
-    state.chunkSelected = [];
-    state.chunkScore = 0;
-    state.chunkRemain = 60;
-    state.screen = 'chunk';
-    state.chunkTimer = setInterval(() => {
-      state.chunkRemain -= 1;
-      if (state.chunkRemain <= 0) {
-        endChunkSession();
-        return;
-      }
-      const timerEl = document.querySelector('.chunk-timer');
-      if (timerEl) timerEl.textContent = `${state.chunkRemain}s`;
-    }, 1000);
+    state.toneSession = {
+      ...session,
+      index: session.index + 1,
+      selected: [],
+      hintLevel: 0,
+      confirmed: false,
+      correct: null,
+      currentResult: null,
+      results,
+    };
     rerender();
-  },
-
-  dismissChunkResult() {
-    state.chunkResult = null;
-    rerender();
-  },
-
-  toggleChunkPc(pc) {
-    if (!state.chunkActive || state._chunkChecking) return;
-    const sel = [...(state.chunkSelected || [])];
-    const idx = sel.indexOf(pc);
-    if (idx >= 0) sel.splice(idx, 1);
-    else sel.push(pc);
-    state.chunkSelected = sel;
-    rerender();
-  },
-
-  clearChunkSelect() {
-    if (state._chunkChecking) return;
-    state.chunkSelected = [];
-    rerender();
-  },
-
-  async checkChunk() {
-    if (!state.chunkActive || !state.chunkTarget || state._chunkChecking) return;
-    const ok = pcsMatch(state.chunkSelected || [], chordPcs(state.chunkTarget));
-    if (state._kb) state._kb.flashResult(ok);
-
-    state._chunkChecking = true;
-    if (ok) {
-      // 連打二重加点防止: await 前に同期で加点・次問へ
-      state.chunkScore = (state.chunkScore || 0) + 1;
-      state.chunkTarget = pickChunkTarget();
-      state.chunkSelected = [];
-      rerender();
-      try {
-        await synth.playSuccess();
-      } finally {
-        state._chunkChecking = false;
-      }
-      return;
-    }
-
-    try {
-      await synth.playMiss();
-    } finally {
-      state._chunkChecking = false;
-      rerender();
-    }
   },
 };
 
 synth.setVolume(state.volume);
 document.addEventListener('pointerdown', () => synth.ensureRunning(), { once: true });
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (state.plaque) actions.dismissPlaque();
+  else if (state.settingsOpen) actions.closeSettings();
+});
 rerender();
